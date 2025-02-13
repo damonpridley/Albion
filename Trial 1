@@ -1,0 +1,81 @@
+import streamlit as st
+from utils.api_client import AlbionAPIClient
+from utils.data_processor import DataProcessor
+from utils.database import init_db
+
+# Initialize database
+try:
+    init_db()
+except Exception as e:
+    st.error(f"Failed to initialize database: {e}")
+    st.stop()
+
+st.set_page_config(
+    page_title="Albion Online Tracker",
+    page_icon="⚔️",
+    layout="wide"
+)
+
+# Load custom CSS
+with open('assets/style.css') as f:
+    st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+
+def main():
+    st.title("⚔️ Albion Online Data Tracker")
+
+    # Initialize API client
+    try:
+        api_client = AlbionAPIClient()
+    except Exception as e:
+        st.error(f"Failed to initialize API client: {e}")
+        return
+
+    # Sidebar navigation
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio(
+        "Select a page",
+        ["Market Prices", "Player Stats", "Guild Info", "Resource Tracker"]
+    )
+
+    # Display selected page
+    if page == "Market Prices":
+        st.header("Market Prices")
+        item_id = st.text_input("Enter item ID", "T4_BAG")
+
+        if st.button("Fetch Prices"):
+            with st.spinner('Fetching market data...'):
+                try:
+                    prices = api_client.get_item_prices(item_id)
+                    if prices:
+                        df = DataProcessor.process_market_data(prices)
+                        fig = DataProcessor.create_price_chart(df, item_id)
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("No data found for this item")
+                except Exception as e:
+                    st.error(f"Error fetching market data: {e}")
+
+    elif page == "Player Stats":
+        st.header("Player Statistics")
+        player_name = st.text_input("Enter player name")
+
+        if st.button("Search Player"):
+            with st.spinner('Fetching player data...'):
+                try:
+                    player_data = api_client.get_player_info(player_name)
+                    if player_data:
+                        stats = DataProcessor.process_player_stats(player_data)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Kill Fame", f"{stats.get('kills', 0):,}")
+                        with col2:
+                            st.metric("Death Fame", f"{stats.get('deaths', 0):,}")
+                        st.write(f"Guild: {stats.get('guild', 'No Guild')}")
+                        st.write(f"Alliance: {stats.get('alliance', 'No Alliance')}")
+                    else:
+                        st.warning("Player not found")
+                except Exception as e:
+                    st.error(f"Error fetching player data: {e}")
+
+if __name__ == "__main__":
+    main()
